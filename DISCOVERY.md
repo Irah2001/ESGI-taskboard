@@ -111,3 +111,46 @@ Architecture : L'application suit un modèle MVC (Modèle-Vue-Contrôleur) simpl
     Le - : Payant (à l'usage) et vous rend dépendant d'un fournisseur cloud précis.
 
     Quand l'utiliser : Le meilleur compromis pour la production si votre application est hébergée sur le Cloud.
+
+## Étape 2 : Conteneurisation
+
+### Analyse du problème
+
+- Pourquoi conteneuriser une application Node.js ?
+    - Isolation : Chaque conteneur fonctionne de manière isolée, ce qui réduit les conflits de dépendances et les problèmes de compatibilité.
+    - Portabilité : Les conteneurs peuvent être exécutés sur n'importe quelle machine disposant d'un moteur de conteneurs (comme Docker), assurant une cohérence entre les environnements de développement, de test et de production.
+    - Scalabilité : Les conteneurs permettent de facilement scaler horizontalement en dupliquant les instances selon la demande.
+    - Gestion simplifiée : Les outils d'orchestration comme Kubernetes facilitent la gestion, le déploiement et la mise à jour des applications conteneurisées.
+
+- Qu'est-ce qu'un « build reproductible » ?
+Un build reproductible garantit que le même code source, avec les mêmes dépendances et configurations, produira toujours le même résultat binaire ou exécutable. Cela est crucial pour la fiabilité, la sécurité et la traçabilité des applications, car cela permet de s'assurer que les versions déployées sont exactement celles qui ont été testées.
+
+### Comparatif : Choix de l'image de base Docker
+
+| Image de base | Taille | Compatibilité & Support | Surface d'attaque (Sécurité) | Cas d'usage idéal |
+| :--- | :--- | :--- | :--- | :--- |
+| **`node:20`** | ~1 Go | **Maximale.** Basée sur un OS Debian complet. Contient tous les outils système (git, python, compilateurs). | **Très large.** Des centaines de paquets inutiles en production qui sont autant de failles potentielles. | Développement local ou builds très complexes. **À éviter en production.** |
+| **`node:20-slim`** | ~200 Mo | **Très bonne.** Basée sur Debian allégé. Retire les outils lourds mais garde la librairie standard classique (`glibc`). | **Réduite.** Bon équilibre si l'application dépend de librairies complexes. | Applications utilisant des modules natifs C++ qui posent problème sur Alpine. |
+| **`node:20-alpine`** | ~120 Mo | **Bonne.** Basée sur Alpine Linux. Utilise `musl` au lieu de `glibc`, ce qui peut (rarement) demander de recompiler certaines dépendances. | **Minime.** Très peu de paquets système inclus, image très légère. | **Le standard recommandé en production** pour 95% des API web (dont notre projet). |
+| **`gcr.io/distroless/nodejs20`** | ~100 Mo | **Stricte.** Image conçue par Google contenant *uniquement* Node.js. Ne possède même pas de shell (`/bin/sh` ou `bash`). | **Excellente.** La surface d'attaque est la plus faible possible. | Environnements ultra-sécurisés (Défense, santé, banque). Impossible d'y entrer pour débugger. |
+
+### Stratégie de build : Multi-stage vs Single-stage
+
+**Single-stage** : On copie le code, on installe tout, on lance. Résultat : l'image finale contient les outils de compilation, le cache npm, et les devDependencies. C'est lourd et risqué.
+
+**Multi-stage** : On utilise une première image pour installer et compiler (le "Builder"), puis on copie uniquement le résultat final dans une seconde image vierge (le "Runner"). C'est la norme en production.
+
+### Sécurité de l'image
+
+**Root vs Utilisateur dédié** : Par défaut, Docker exécute tout en tant que root. Si l'appli est piratée, le hacker est root dans le conteneur. Node fournit un utilisateur non privilégié nommé node qu'il faut explicitement activer.
+
+**Lecture seule** : Le système de fichiers du conteneur ne devrait pas être modifiable par l'application (sauf un dossier /tmp si nécessaire).
+
+**HEALTHCHECK** : Permet à Docker de savoir si l'appli est réellement capable de répondre à une requête HTTP, plutôt que de juste vérifier si le processus Node tourne (il pourrait être bloqué (deadlock)).
+
+### Gestion des dépendances
+
+`npm ci` vs `npm install` : `npm install` peut mettre à jour le fichier `package-lock.json`. `npm ci` (Clean Install) fait l'inverse : il supprime `node_modules` et installe strictement les versions figées dans le lockfile. C'est obligatoire pour un build reproductible.
+
+**Cache Docker** : En copiant `package.json` et en lançant `npm ci` avant de copier le reste du code source, on indique à Docker de mettre en cache les dépendances. Ainsi, si on modifie juste du code métier, le build prendra 2 secondes au lieu de retélécharger tout internet.
+
