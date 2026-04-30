@@ -154,3 +154,51 @@ Un build reproductible garantit que le même code source, avec les mêmes dépen
 
 **Cache Docker** : En copiant `package.json` et en lançant `npm ci` avant de copier le reste du code source, on indique à Docker de mettre en cache les dépendances. Ainsi, si on modifie juste du code métier, le build prendra 2 secondes au lieu de retélécharger tout internet.
 
+## Étape 3 : Tests automatisés
+
+### Analyse du problème
+
+- Qu'est-ce que la pyramide des tests ? Quels types de tests existent ?
+La pyramide des tests est un concept qui illustre la proportion idéale de différents types de tests dans une suite de tests automatisés. Elle se compose de trois niveaux principaux :
+    - Tests unitaires (base de la pyramide) : Ils testent des fonctions ou des méthodes individuelles de manière isolée. Ils sont rapides à exécuter et faciles à écrire, mais ne garantissent pas que les différentes parties de l'application fonctionnent bien ensemble.
+    - Tests d'intégration (milieu de la pyramide) : Ils testent l'interaction entre plusieurs composants ou modules. Ils sont plus lents que les tests unitaires, mais permettent de vérifier que les différentes parties de l'application fonctionnent correctement ensemble.
+    - Tests end-to-end (sommet de la pyramide) : Ils testent l'application dans son ensemble, du point de vue de l'utilisateur final. Ils sont les plus lents et les plus coûteux à maintenir, mais offrent la meilleure garantie que l'application fonctionne comme prévu dans un environnement de production.
+
+- Qu'est-ce que la couverture de code ? Est-ce un indicateur suffisant de la qualité des tests ?
+La couverture de code est une métrique qui mesure le pourcentage de code source qui est exécuté lors de l'exécution des tests automatisés. Elle peut être mesurée à différents niveaux, tels que la couverture des lignes de code, la couverture des branches ou la couverture des fonctions. Bien que la couverture de code puisse fournir une indication de la quantité de code testée, elle n'est pas un indicateur suffisant de la qualité des tests. Un taux de couverture élevé ne garantit pas que les tests sont efficaces ou qu'ils couvrent tous les scénarios possibles. Il est possible d'avoir une couverture élevée avec des tests qui ne vérifient pas correctement les résultats attendus ou qui ne couvrent pas les cas d'erreur. Par conséquent, il est important d'utiliser la couverture de code en conjonction avec d'autres métriques et pratiques pour évaluer la qualité globale des tests.
+
+- Comment tester une API REST ? Quels outils existent pour ça ?
+Pour tester une API REST, il est important de vérifier que les différentes routes fonctionnent correctement, que les réponses sont conformes aux attentes et que les erreurs sont gérées de manière appropriée. Voici quelques outils populaires pour tester une API REST :
+    - Postman : Un outil graphique qui permet de créer, organiser et exécuter des requêtes HTTP pour tester les API. Il offre également des fonctionnalités de scripting pour automatiser les tests.
+    - Insomnia : Un autre client HTTP avec une interface utilisateur intuitive, similaire à Postman, qui permet de tester les API REST facilement.
+    - Jest : Un framework de test JavaScript qui peut être utilisé pour écrire des tests unitaires et d'intégration pour une API Node.js. Il peut être combiné avec des bibliothèques comme Supertest pour tester les routes de l'API.
+    - Mocha : Un autre framework de test JavaScript qui offre une grande flexibilité pour écrire des tests unitaires et d'intégration. Il peut également être utilisé avec Supertest pour tester les API REST.
+    - Newman : Un outil en ligne de commande qui permet d'exécuter des collections Postman dans un environnement CI/CD, facilitant ainsi l'automatisation des tests d'API.
+
+### Exploration de l'existant
+- L'application utilise Jest pour les tests unitaires, avec une configuration de base dans le `package.json`. Les tests sont organisés dans le dossier `tests/unit` et couvrent principalement les fonctions utilitaires et les modèles de données.
+- La couverture de code est mesurée à l'aide de `jest --coverage`, qui génère un rapport détaillé indiquant les lignes de code couvertes par les tests. Actuellement, la couverture globale est d'environ 60%, avec des zones critiques (comme les routes API) qui ne sont pas suffisamment testées.
+
+Ce qui est testé (16 tests au total) :
+- Unit tests (tests/unit/task.test.js) : Probablement la logique du modèle Task (validation de l'état "todo", "in-progress", etc.).
+
+- Integration tests (tests/integration/api.test.js) :
+    - /health : Vérifie que l'endpoint répond 200 (quand DB ok) et 503 (quand DB down).
+    - /auth/login : Test de succès (200) et d'échec (401 Unauthorized, 400 Bad Request).
+    - /tasks : Accès refusé sans token (401), récupération des tâches (200), création d'une tâche (201).
+
+Ce qui manque (Les failles dans la couverture) :
+- Pas de tests pour les routes PUT /tasks/:id et DELETE /tasks/:id.
+- Pas de tests pour les cas d'erreur (ex: création de tâche sans titre, ou avec un token expiré).
+- Pas de tests pour les middlewares d'authentification et de gestion d'erreur.
+- Pas de tests end-to-end qui simulent un utilisateur réel interagissant avec l'API de bout en bout.
+
+### Mise en place et Documentation des lacunes
+- Ajouter des tests pour les routes PUT et DELETE, en vérifiant à la fois les cas de succès et d'échec (ex: mise à jour d'une tâche inexistante, suppression sans token).
+- Ajouter des tests pour les middlewares, en simulant des requêtes avec des tokens invalides ou expirés, et en vérifiant que les erreurs sont correctement gérées.
+- Mettre en place des tests end-to-end avec un outil comme Supertest ou Postman pour simuler des scénarios utilisateur complets, comme la création d'une tâche, sa mise à jour, et sa suppression, tout en vérifiant les réponses à chaque étape.
+
+### Les failles critiques découvertes grâce aux 3 nouveaux tests :
+- La faille d'injection SQL découverte sur la route GET /tasks?status= (utilisation de concaténation de chaînes au lieu de requêtes paramétrées).
+- Le crash du serveur (Erreur 500) sur la route DELETE /tasks/:id lorsqu'on tentait de supprimer une tâche inexistante (absence de vérification de rowCount).
+- Le manque de validation des données sur le PUT /tasks/:id (l'API acceptait n'importe quel statut invalide au lieu de renvoyer une 400).

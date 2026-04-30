@@ -113,3 +113,47 @@ describe('POST /tasks', () => {
     expect(res.body.status).toBe('todo');
   });
 });
+
+describe('GET /tasks (avec filtres)', () => {
+  test('should return filtered tasks when status query parameter is provided', async () => {
+    const mockTasks = [
+      { id: 1, title: 'Task 1', status: 'todo' },
+      { id: 3, title: 'Task 3', status: 'todo' },
+    ];
+    pool.query.mockResolvedValue({ rows: mockTasks });
+
+    const token = generateToken();
+    const res = await request(app)
+      .get('/tasks?status=todo')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(2);
+    expect(pool.query).toHaveBeenCalledWith(expect.stringContaining('WHERE status = $1'), expect.anything());
+  });
+});
+
+describe('PUT /tasks/:id', () => {
+  test('should return 400 when trying to update with an invalid status', async () => {
+    const token = generateToken();
+    const res = await request(app)
+      .put('/tasks/1')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'un_statut_qui_n_existe_pas' });
+
+    expect(res.status).toBe(400); 
+  });
+});
+
+describe('DELETE /tasks/:id', () => {
+  test('should return 404 when trying to delete a non-existent task', async () => {
+    pool.query.mockResolvedValue({ rowCount: 0 });
+
+    const token = generateToken();
+    const res = await request(app)
+      .delete('/tasks/9999')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(404);
+  });
+});

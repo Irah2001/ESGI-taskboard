@@ -27,6 +27,7 @@ app.get('/health', async (req, res) => {
     await pool.query('SELECT 1');
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   } catch (err) {
+    // eslint-disable-next-line no-console
     console.error('Health check failed:', err.message);
     res.status(503).json({ status: 'error', message: 'Database connection failed' });
   }

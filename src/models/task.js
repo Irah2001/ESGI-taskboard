@@ -12,8 +12,7 @@ const Task = {
   },
 
   findByStatus: async (status) => {
-    // TODO: This query could be improved
-    const result = await pool.query(`SELECT * FROM tasks WHERE status = '${status}'`);
+    const result = await pool.query('SELECT * FROM tasks WHERE status = $1', [status]);
     return result.rows;
   },
 
@@ -35,6 +34,11 @@ const Task = {
 
   delete: async (id) => {
     const result = await pool.query('DELETE FROM tasks WHERE id = $1 RETURNING *', [id]);
+
+    if (result.rowCount === 0) {
+      return null; 
+    }
+
     return result.rows[0];
   },
 };

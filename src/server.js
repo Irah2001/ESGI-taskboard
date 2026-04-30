@@ -7,6 +7,7 @@ const bcrypt = require('bcryptjs');
 const PORT = process.env.PORT || 3000;
 
 const initDb = async () => {
+  // eslint-disable-next-line no-console
   console.log('Initializing database...');
 
   // Create tables
@@ -38,15 +39,18 @@ const initDb = async () => {
       'INSERT INTO users (username, password) VALUES ($1, $2)',
       ['admin', hashedPassword]
     );
+    // eslint-disable-next-line no-console
     console.log('Default user created — username: admin, password: admin123');
   }
 
+  // eslint-disable-next-line no-console
   console.log('Database initialized successfully');
 };
 
 initDb()
   .then(() => {
     app.listen(PORT, () => {
+      // eslint-disable-next-line no-console
       console.log(`Taskboard API running on http://localhost:${PORT}`);
     });
   })

@@ -28,6 +28,7 @@ router.post('/login', async (req, res) => {
       { expiresIn: '24h' }
     );
 
+    // eslint-disable-next-line no-console
     console.log('User logged in:', username);
 
     res.json({
@@ -35,6 +36,7 @@ router.post('/login', async (req, res) => {
       user: { id: user.id, username: user.username },
     });
   } catch (err) {
+    // eslint-disable-next-line no-console
     console.error('Login error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }

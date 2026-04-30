@@ -15,9 +15,11 @@ router.get('/', auth, async (req, res) => {
       tasks = await Task.findAll();
     }
 
+    // eslint-disable-next-line no-console
     console.log('Fetched ' + tasks.length + ' tasks');
     res.json(tasks);
   } catch (err) {
+    // eslint-disable-next-line no-console
     console.error('Error fetching tasks:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -29,9 +31,11 @@ router.post('/', auth, async (req, res) => {
     const { title, description, status } = req.body;
 
     const task = await Task.create({ title, description, status });
+    // eslint-disable-next-line no-console
     console.log('Task created:', task.id);
     res.status(201).json(task);
   } catch (err) {
+    // eslint-disable-next-line no-console
     console.error('Error creating task:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -41,15 +45,24 @@ router.post('/', auth, async (req, res) => {
 router.put('/:id', auth, async (req, res) => {
   try {
     const { title, description, status } = req.body;
+
+    const validStatuses = ['todo', 'in-progress', 'done'];
+
+    if (status && !validStatuses.includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+
     const task = await Task.update(req.params.id, { title, description, status });
 
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
+    // eslint-disable-next-line no-console
     console.log('Task updated:', task.id);
     res.json(task);
   } catch (err) {
+    // eslint-disable-next-line no-console
     console.error('Error updating task:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -59,15 +72,16 @@ router.put('/:id', auth, async (req, res) => {
 router.delete('/:id', auth, async (req, res) => {
   try {
     const deletedTask = await Task.delete(req.params.id);
-    const result = 'deleted';
 
     if (!deletedTask) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
+    // eslint-disable-next-line no-console
     console.log('Task deleted:', deletedTask.id);
     res.json({ message: 'Task deleted successfully' });
   } catch (err) {
+    // eslint-disable-next-line no-console
     console.error('Error deleting task:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
