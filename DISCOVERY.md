@@ -231,3 +231,41 @@ Ce qui manque (Les failles dans la couverture) :
 | **GHCR (GitHub)** | **Native** | Automatique (`GITHUB_TOKEN`) | Gratuit pour l'open source | **Ce projet.** Tout reste au même endroit. |
 | **Docker Hub** | Externe | Nécessite des secrets externes | Limites de *pull* (Rate Limits) | Projets open source très distribués. |
 | **AWS ECR / GCP** | Externe | IAM (Complexe à sécuriser) | Payant (Stockage/Bande passante) | Déploiement en production sur le Cloud. |
+
+## Étape 5 — Déploiement local via SSH
+
+### 1. Analyse du problème
+
+*   **Connexion GitHub Actions ➔ Machine locale (NAT) :** Mon environnement de développement local se trouve derrière un routeur (NAT/Pare-feu) qui bloque par défaut les connexions entrantes. GitHub Actions, qui tourne dans le cloud, ne peut donc pas initier une connexion directe pour joindre ma machine.
+*   **Tunnel SSH et Port Forwarding inversé (Reverse) :** Pour contourner cette restriction, la solution consiste à initier la connexion *depuis* la machine locale vers un serveur public relais. Le *Reverse Port Forwarding* (`ssh -R`) permet d'indiquer à ce serveur public d'ouvrir un port chez lui, et de rediriger tout le trafic qui y entre vers un port spécifique de ma machine locale, au travers de notre tunnel sécurisé.
+*   **Déploiement Idempotent :** L'idempotence signifie qu'une opération peut être exécutée de multiples fois en produisant toujours le même résultat final, sans provoquer de plantage. Dans le contexte d'une pipeline CI/CD, c'est indispensable : relancer le script de déploiement ne doit pas faire crasher le système (par exemple, en essayant de supprimer un conteneur qui n'existe pas encore ou en créant des conflits de noms).
+*   **Healthcheck post-déploiement :** Démarrer un conteneur avec succès via Docker ne garantit pas que l'application à l'intérieur est fonctionnelle (elle pourrait crasher quelques secondes plus tard à cause d'un identifiant de base de données invalide). Le healthcheck consiste à pinguer l'application (ex: via une requête HTTP sur la route `/health`) *après* son lancement. Si cette vérification échoue, le script doit s'interrompre en erreur pour que la pipeline reflète l'échec du déploiement.
+
+### 2. Comparatif des solutions
+
+**Outils de tunnel SSH :**
+
+| Outil | Avantages | Inconvénients / Contraintes | Cas d'usage idéal |
+| :--- | :--- | :--- | :--- |
+| **ngrok** | Très populaire, stable, interface de monitoring riche. | Nécessite un compte, l'installation d'un binaire, et des sessions très restreintes en gratuit. | Projets professionnels, débogage de webhooks. |
+| **localhost.run** | Fonctionne nativement avec le client SSH de l'OS, sans aucune installation. | Peut subir des lenteurs ou des limitations selon la charge du service. | Tests rapides. |
+| **Cloudflare Tunnel** | Extrêmement robuste, sécurisé, parfait pour la production. | Mise en place lourde (nécessite le démon `cloudflared`, un domaine et un compte). | Environnements de production réels. |
+| **Pinggy** | Fonctionne via le terminal SSH sans installation, interface terminal claire. | L'URL change à chaque nouvelle session gratuite. | **Ce TP** (simplicité de mise en place). |
+| **serveo.net** | Pionnier du sans-installation via SSH. | Souvent saturé, instable ou hors ligne. | À éviter actuellement. |
+
+**Mécanismes d'authentification SSH :**
+
+*   **Mot de passe vs Clé :** L'authentification par mot de passe est vulnérable aux attaques par force brute et s'avère difficile à automatiser proprement dans des scripts. L'authentification par clé cryptographique asymétrique (publique/privée) est infalsifiable et parfaitement adaptée aux interactions de machine à machine (robots CI/CD).
+*   **Types de clés :**
+    *   *RSA (2048 / 4096 bits) :* Algorithme historique et universel, mais génère des clés très longues et moins performantes.
+    *   *Ed25519 :* **Le standard moderne.** Basé sur les courbes elliptiques. Les clés générées sont courtes, les calculs ultra-rapides, et le niveau de sécurité est optimal. C'est le format retenu pour ce projet.
+*   **Bonnes pratiques appliquées :** J'ai généré une clé *dédiée* spécifiquement à ce déploiement (isolation des accès), sans phrase secrète (*passphrase*) pour permettre à GitHub Actions de l'utiliser de manière autonome, et avec des permissions de fichiers restreintes (`chmod 600`).
+
+### 3. Architecture et Implémentation retenues
+
+Pour simuler un serveur distant en local et permettre l'accès à GitHub Actions, l'architecture suivante a été mise en œuvre :
+
+1.  **Conteneur "Serveur SSH" local :** Création d'une image Docker (basée sur Ubuntu) intégrant `openssh-server` et le client Docker. Afin qu'il puisse déployer l'application, le socket Docker de l'hôte (`/var/run/docker.sock`) lui est monté en volume. L'accès SSH est sécurisé et limité à l'utilisateur `deployer` via la clé publique Ed25519.
+2.  **Ouverture du Tunnel :** Un tunnel inversé (via Pinggy ou équivalent) expose le port 22 du conteneur SSH local sur une URL publique.
+3.  **Script de déploiement (`deploy.sh`) :** Création d'un script bash rendu idempotent en absorbant les erreurs potentielles de nettoyage (ex: `docker rm taskboard-app || true`). Il inclut un délai d'attente (`sleep`) et effectue un healthcheck via `curl`. Le script retourne le code de sortie `1` en cas d'échec HTTP pour faire passer la pipeline au rouge.
+4.  **Pipeline CI :** Ajout d'un stage `deploy`, conditionné à des modifications sur la branche `main` et attendant le succès du job `build-and-push`. Les identifiants (Hôte, Port, Utilisateur, Clé privée) sont sécurisés et injectés via les *Repository Secrets* de GitHub.
