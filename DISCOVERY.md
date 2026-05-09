@@ -202,3 +202,32 @@ Ce qui manque (Les failles dans la couverture) :
 - La faille d'injection SQL découverte sur la route GET /tasks?status= (utilisation de concaténation de chaînes au lieu de requêtes paramétrées).
 - Le crash du serveur (Erreur 500) sur la route DELETE /tasks/:id lorsqu'on tentait de supprimer une tâche inexistante (absence de vérification de rowCount).
 - Le manque de validation des données sur le PUT /tasks/:id (l'API acceptait n'importe quel statut invalide au lieu de renvoyer une 400).
+
+## Étape 4 — Pipeline CI : Intégration Continue
+
+### Analyse du problème
+
+*   **Différence entre CI et CD :** 
+    *   **CI (Intégration Continue) :** C'est le fait d'intégrer fréquemment le code au dépôt principal. À chaque *push*, on automatise les vérifications (Lint, Tests, Build) pour s'assurer qu'on n'a rien cassé.
+    *   **CD (Déploiement Continu / Livraison Continue) :** C'est l'étape suivante. Une fois la CI validée, le code est automatiquement déployé en production (Déploiement) ou du moins packagé et prêt à être déployé d'un simple clic (Livraison).
+*   **Runners GitHub Actions :** Un *runner* est un serveur (une machine virtuelle ou un conteneur) qui exécute les instructions de notre pipeline. Il peut être hébergé par GitHub (ils tournent sur l'infrastructure Microsoft Azure) ou auto-hébergé (*self-hosted*) sur nos propres serveurs.
+*   **Artefact de pipeline :** C'est un fichier ou un dossier généré pendant l'exécution d'un *job* (ex: un rapport de couverture de tests, un binaire compilé). Il sert à sauvegarder ces résultats pour les télécharger plus tard ou les transmettre à un autre *job* dans la même pipeline.
+*   **Dépendances entre jobs :** Par défaut, GitHub Actions lance tous les *jobs* en parallèle pour gagner du temps. L'instruction `needs: [job_name]` permet de créer une séquence : le job de Build attendra que le job de Tests soit passé au vert avant de démarrer.
+
+### Comparatif des solutions
+
+**Plateformes de CI/CD :**
+
+| Outil | Prix (Dépôts Publics) | Syntaxe | Écosystème | Courbe d'apprentissage |
+| :--- | :--- | :--- | :--- | :--- |
+| **GitHub Actions** | Gratuit | YAML | Immense (Marketplace natif) | Faible (Intégration parfaite avec GitHub) |
+| **GitLab CI** | Gratuit (avec quotas) | YAML | Excellent (Très robuste) | Moyenne à Difficile (Très complet) |
+| **CircleCI** | Gratuit (avec quotas) | YAML (Orbs) | Très bon | Moyenne (Outil externe à lier au VCS) |
+
+**Registries Docker :**
+
+| Registry | Intégration GitHub | Authentification | Coût / Limites | Idéal pour... |
+| :--- | :--- | :--- | :--- | :--- |
+| **GHCR (GitHub)** | **Native** | Automatique (`GITHUB_TOKEN`) | Gratuit pour l'open source | **Ce projet.** Tout reste au même endroit. |
+| **Docker Hub** | Externe | Nécessite des secrets externes | Limites de *pull* (Rate Limits) | Projets open source très distribués. |
+| **AWS ECR / GCP** | Externe | IAM (Complexe à sécuriser) | Payant (Stockage/Bande passante) | Déploiement en production sur le Cloud. |
